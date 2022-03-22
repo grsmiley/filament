@@ -271,7 +271,7 @@ class Resolve(IsolatedAsyncioTestCase):
     async def test_falsy_cache(self):
         dict_ = {}
         class A:
-            def __init__(self, a1:'test', a2:'test'):
+            def __init__(self, a1:'test', a2:'test'): # noqa: F821
                 self.a1 = a1
                 self.a2 = a2
 
