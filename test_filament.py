@@ -1,6 +1,6 @@
 from argparse import ArgumentError
 from unittest import IsolatedAsyncioTestCase
-from filament import Injector, BindingContext, BindingScope
+from filament import AsyncInjector, Injector, BindingContext, BindingScope
 
 class BindingContextCase(IsolatedAsyncioTestCase):
     async def test_init(self):
@@ -54,43 +54,77 @@ class BindingContextCase(IsolatedAsyncioTestCase):
         bc = BindingContext()
         dict_ = dict()
         bc.transient('test', dict_)
-        i = Injector(bc)
+        
+        # Async
+        i = AsyncInjector(bc)
         result = await i.resolve('test')
         self.assertIs(result, dict_)
 
+        # Sync
+        i = Injector(bc)
+        result = i.resolve('test')
+        self.assertIs(result, dict_)
+
+    async def test_falsy_base_binding(self):
+        bc = BindingContext()
+        with self.assertRaises(ValueError):
+            bc.transient('', lambda:'test')
+
 class Resolve(IsolatedAsyncioTestCase):
     async def test_resolve_callable(self):
-        i = Injector()
         class A:
             pass
+
+        # Async
+        i = AsyncInjector()
         result = await i.resolve(A)
+        self.assertIsInstance(result, A)
+
+        # Sync
+        i = Injector()
+        result = i.resolve(A)
         self.assertIsInstance(result, A)
 
     async def test_resolve_noncallable(self):
         class A:
             pass
         bc = BindingContext(transients={A:'y'})
-        i = Injector(context=bc)
+        
+        # Async
+        i = AsyncInjector(context=bc)
         result = await i.resolve(A)
+        self.assertEqual(result, 'y')
+
+        # Sync
+        i = Injector(context=bc)
+        result = i.resolve(A)
         self.assertEqual(result, 'y')
 
     async def test_resolve_string(self):
         bc = BindingContext(transients={'x':'y'})
-        i = Injector(context=bc)
+        
+        # Async
+        i = AsyncInjector(context=bc)
+        result = await i.resolve('x')
+        self.assertEqual(result, 'y')
+
+        # Sync
+        i = AsyncInjector(context=bc)
         result = await i.resolve('x')
         self.assertEqual(result, 'y')
 
     async def test_resolve_awaitable(self):
-        i = Injector()
         class A:
             pass    
         async def B(a:A):
             return ('_', a)
+
+        # Async only
+        i = AsyncInjector()
         _, result = await i.resolve(B)
         self.assertIsInstance(result, A)
 
     async def test_resolve_recursive(self):
-        i = Injector()
         class A:
             pass
 
@@ -102,10 +136,20 @@ class Resolve(IsolatedAsyncioTestCase):
             def __init__(self, b:B):
                 self.b = b
 
+        # Async
+        i = AsyncInjector()
         result = await i.resolve(C)
         self.assertIsInstance(result, C)
         self.assertIsInstance(result.b, B)
         self.assertIsInstance(result.b.a, A)
+
+        # Sync
+        i = Injector()
+        result = i.resolve(C)
+        self.assertIsInstance(result, C)
+        self.assertIsInstance(result.b, B)
+        self.assertIsInstance(result.b.a, A)
+
 
     async def test_scope_transient(self):
         class A:
@@ -116,8 +160,17 @@ class Resolve(IsolatedAsyncioTestCase):
                 self.a2 = a2
         bc = BindingContext()
         bc.transient(A)
-        i = Injector(bc)
+
+        # Async
+        i = AsyncInjector(bc)
         result = await i.resolve(B)
+        self.assertIsInstance(result.a1, A)
+        self.assertIsInstance(result.a2, A)
+        self.assertIsNot(result.a1, result.a2)
+
+        # Sync
+        i = Injector(bc)
+        result = i.resolve(B)
         self.assertIsInstance(result.a1, A)
         self.assertIsInstance(result.a2, A)
         self.assertIsNot(result.a1, result.a2)
@@ -131,13 +184,30 @@ class Resolve(IsolatedAsyncioTestCase):
                 self.a2 = a2
         bc = BindingContext()
         bc.local(A)
-        i = Injector(bc)
+        
+        # Async
+        i = AsyncInjector(bc)
         result1 = await i.resolve(B)
         self.assertIsInstance(result1.a1, A)
         self.assertIsInstance(result1.a2, A)
         self.assertIs(result1.a1, result1.a2)
 
         result2 = await i.resolve(B)
+        self.assertIsInstance(result2.a1, A)
+        self.assertIsInstance(result2.a2, A)
+        self.assertIs(result2.a1, result2.a2)
+
+        self.assertIsNot(result1.a1, result2.a1)
+        self.assertIsNot(result1.a2, result2.a2)
+
+        # Sync
+        i = Injector(bc)
+        result1 = i.resolve(B)
+        self.assertIsInstance(result1.a1, A)
+        self.assertIsInstance(result1.a2, A)
+        self.assertIs(result1.a1, result1.a2)
+
+        result2 = i.resolve(B)
         self.assertIsInstance(result2.a1, A)
         self.assertIsInstance(result2.a2, A)
         self.assertIs(result2.a1, result2.a2)
@@ -154,7 +224,9 @@ class Resolve(IsolatedAsyncioTestCase):
                 self.a2 = a2
         bc = BindingContext()
         bc.singleton(A)
-        i = Injector(bc)
+
+        # Async
+        i = AsyncInjector(bc)
         result1 = await i.resolve(B)
         self.assertIsInstance(result1.a1, A)
         self.assertIsInstance(result1.a2, A)
@@ -168,14 +240,36 @@ class Resolve(IsolatedAsyncioTestCase):
         self.assertIs(result1.a1, result2.a1)
         self.assertIs(result1.a2, result2.a2)
 
+        # Sync
+        i = Injector(bc)
+        result1 = i.resolve(B)
+        self.assertIsInstance(result1.a1, A)
+        self.assertIsInstance(result1.a2, A)
+        self.assertIs(result1.a1, result1.a2)
+
+        result2 = i.resolve(B)
+        self.assertIsInstance(result2.a1, A)
+        self.assertIsInstance(result2.a2, A)
+        self.assertIs(result2.a1, result2.a2)
+
+        self.assertIs(result1.a1, result2.a1)
+        self.assertIs(result1.a2, result2.a2)
+
     async def test_default_mapping(self):
         class A:
             pass
         class B:
             def __init__(self, a:A):
                 self.a = a
-        i = Injector()
+
+        # Async
+        i = AsyncInjector()
         result = await i.resolve(B)
+        self.assertIsInstance(result.a, A)
+
+        # Sync
+        i = Injector()
+        result = i.resolve(B)
         self.assertIsInstance(result.a, A)
 
     async def test_implicit_mapping(self):
@@ -186,8 +280,15 @@ class Resolve(IsolatedAsyncioTestCase):
                 self.a = a
         bc = BindingContext()
         bc.local(A)
-        i = Injector(bc)
+
+        # Async
+        i = AsyncInjector(bc)
         result = await i.resolve(B)
+        self.assertIsInstance(result.a, A)
+
+        # Sync
+        i = Injector(bc)
+        result = i.resolve(B)
         self.assertIsInstance(result.a, A)
 
     async def test_explicit_mapping(self):
@@ -199,8 +300,15 @@ class Resolve(IsolatedAsyncioTestCase):
             def __init__(self, a:A):
                 self.a = a
         bc = BindingContext(locals={A:A_})
-        i = Injector(bc)
+        
+        # Async
+        i = AsyncInjector(bc)
         result = await i.resolve(B)
+        self.assertIsInstance(result.a, A_)
+
+        # Sync
+        i = Injector(bc)
+        result = i.resolve(B)
         self.assertIsInstance(result.a, A_)
 
     async def test_resolution_order(self):
@@ -213,17 +321,31 @@ class Resolve(IsolatedAsyncioTestCase):
                 self.a = a
 
         bc = BindingContext(locals={'a':A})
-        i = Injector(bc)
+        
+        # Async
+        i = AsyncInjector(bc)
         result = await i.resolve(B)
+        self.assertIsInstance(result.a, A)
+
+        # Sync
+        i = Injector(bc)
+        result = i.resolve(B)
         self.assertIsInstance(result.a, A)
 
     async def test_no_binding_for_positional(self):
         class A:
             def __init__(self, a):
                 self.a = a
-        i = Injector()
+        
+        # Async
+        i = AsyncInjector()
         with self.assertRaises(TypeError):
             result = await i.resolve(A)
+
+        # Sync
+        i = Injector()
+        with self.assertRaises(TypeError):
+            result = i.resolve(A)
 
     async def test_default_scope(self):
         class A:
@@ -234,13 +356,14 @@ class Resolve(IsolatedAsyncioTestCase):
                 self.a1 = a1
                 self.a2 = a2
         
-        i = Injector(default_scope = BindingScope.Transient)
+        # Async
+        i = AsyncInjector(default_scope = BindingScope.Transient)
         result = await i.resolve(B)
         self.assertIsInstance(result.a1, A)
         self.assertIsInstance(result.a2, A)
         self.assertIsNot(result.a1, result.a2)
         
-        i = Injector(default_scope = BindingScope.Local)
+        i = AsyncInjector(default_scope = BindingScope.Local)
         result1 = await i.resolve(B)
         self.assertIsInstance(result1.a1, A)
         self.assertIsInstance(result1.a2, A)
@@ -250,8 +373,7 @@ class Resolve(IsolatedAsyncioTestCase):
         self.assertIsInstance(result2.a2, A)
         self.assertIsNot(result1.a1, result2.a1)
 
-
-        i = Injector(default_scope = BindingScope.Singleton)
+        i = AsyncInjector(default_scope = BindingScope.Singleton)
         result1 = await i.resolve(B)
         self.assertIsInstance(result1.a1, A)
         self.assertIsInstance(result1.a2, A)
@@ -261,12 +383,46 @@ class Resolve(IsolatedAsyncioTestCase):
         self.assertIsInstance(result2.a2, A)
         self.assertIs(result1.a1, result2.a1)
 
+        # Sync
+        i = Injector(default_scope = BindingScope.Transient)
+        result = i.resolve(B)
+        self.assertIsInstance(result.a1, A)
+        self.assertIsInstance(result.a2, A)
+        self.assertIsNot(result.a1, result.a2)
+        
+        i = Injector(default_scope = BindingScope.Local)
+        result1 = i.resolve(B)
+        self.assertIsInstance(result1.a1, A)
+        self.assertIsInstance(result1.a2, A)
+        self.assertIs(result1.a1, result1.a2)
+        result2 = i.resolve(B)
+        self.assertIsInstance(result2.a1, A)
+        self.assertIsInstance(result2.a2, A)
+        self.assertIsNot(result1.a1, result2.a1)
+
+        i = Injector(default_scope = BindingScope.Singleton)
+        result1 = i.resolve(B)
+        self.assertIsInstance(result1.a1, A)
+        self.assertIsInstance(result1.a2, A)
+        self.assertIs(result1.a1, result1.a2)
+        result2 = i.resolve(B)
+        self.assertIsInstance(result2.a1, A)
+        self.assertIsInstance(result2.a2, A)
+        self.assertIs(result1.a1, result2.a1)
+
     async def test_duplicate_bindings(self):
         bc1 = BindingContext(singletons={'x':'y'})
         bc2 = BindingContext(locals={'x':'z'})
-        i = Injector(bc1)
+        
+        # Async
+        i = AsyncInjector(bc1)
         with self.assertRaises(AssertionError):
             result = await i.resolve('x', context=bc2)
+
+        # Sync
+        i = Injector(bc1)
+        with self.assertRaises(AssertionError):
+            result = i.resolve('x', context=bc2)
 
     async def test_falsy_cache(self):
         dict_ = {}
@@ -277,14 +433,16 @@ class Resolve(IsolatedAsyncioTestCase):
 
         bc = BindingContext()
         bc.local('test', lambda: {})
-        i = Injector(bc)
+        
+        # Async
+        i = AsyncInjector(bc)
         result = await i.resolve(A)
         self.assertIs(result.a1, result.a2)
 
-    async def test_falsy_base_binding(self):
-        bc = BindingContext()
-        with self.assertRaises(ValueError):
-            bc.transient('', lambda:'test')
+        # Sync
+        i = Injector(bc)
+        result = i.resolve(A)
+        self.assertIs(result.a1, result.a2)
 
     async def test_falsy_name_with_annotation(self):
         dict_ = {}
@@ -297,8 +455,15 @@ class Resolve(IsolatedAsyncioTestCase):
         
         bc = BindingContext()
         bc.transient('test', lambda: dict_)
-        i = Injector(bc)
+        
+        # Async
+        i = AsyncInjector(bc)
         result = await i.resolve(B)
+        self.assertIs(result.test, dict_)
+
+        # Sync
+        i = Injector(bc)
+        result = i.resolve(B)
         self.assertIs(result.test, dict_)
 
 class UseCases(IsolatedAsyncioTestCase):
@@ -313,8 +478,16 @@ class UseCases(IsolatedAsyncioTestCase):
         bc = BindingContext()
         bc.transient('a', A)
         bc.transient('b', B)
-        i = Injector(bc)
+
+        # Async
+        i = AsyncInjector(bc)
         result = await i.resolve('b')
+        self.assertIsInstance(result, B)
+        self.assertIsInstance(result.a, A)
+
+        # Sync
+        i = Injector(bc)
+        result = i.resolve('b')
         self.assertIsInstance(result, B)
         self.assertIsInstance(result.a, A)
 
@@ -326,8 +499,15 @@ class UseCases(IsolatedAsyncioTestCase):
             def __init__(self, a:A):
                 self.a = a
 
-        i = Injector()
+        # Async
+        i = AsyncInjector()
         result = await i.resolve(B)
+        self.assertIsInstance(result, B)
+        self.assertIsInstance(result.a, A)
+
+        # Sync
+        i = Injector()
+        result = i.resolve(B)
         self.assertIsInstance(result, B)
         self.assertIsInstance(result.a, A)
 
@@ -342,8 +522,16 @@ class UseCases(IsolatedAsyncioTestCase):
         bc = BindingContext()
         bc.transient(A)
         bc.transient(B)
-        i = Injector(bc)
+
+        # Async
+        i = AsyncInjector(bc)
         result = await i.resolve(B)
+        self.assertIsInstance(result, B)
+        self.assertIsInstance(result.a, A)
+
+        # Sync
+        i = Injector(bc)
+        result = i.resolve(B)
         self.assertIsInstance(result, B)
         self.assertIsInstance(result.a, A)
 
@@ -358,8 +546,16 @@ class UseCases(IsolatedAsyncioTestCase):
         bc = BindingContext()
         bc.transient(A, A)
         bc.transient(B, B)
-        i = Injector(bc)
+        
+        # Async
+        i = AsyncInjector(bc)
         result = await i.resolve(B)
+        self.assertIsInstance(result, B)
+        self.assertIsInstance(result.a, A)
+
+        # Sync
+        i = Injector(bc)
+        result = i.resolve(B)
         self.assertIsInstance(result, B)
         self.assertIsInstance(result.a, A)
 
@@ -376,8 +572,17 @@ class UseCases(IsolatedAsyncioTestCase):
         bc.transient(A)
         bc.transient(B, B)
         bc.transient('my_value', 7)
-        i = Injector(bc)
+        
+        # Async
+        i = AsyncInjector(bc)
         result = await i.resolve(B)
+        self.assertIsInstance(result, B)
+        self.assertIsInstance(result.a, A)
+        self.assertEqual(result.my_value, 7)
+
+        # Sync
+        i = Injector(bc)
+        result = i.resolve(B)
         self.assertIsInstance(result, B)
         self.assertIsInstance(result.a, A)
         self.assertEqual(result.my_value, 7)
@@ -391,7 +596,14 @@ class UseCases(IsolatedAsyncioTestCase):
 
         bc = BindingContext()
         bc.transient('test', dict_)
-        i = Injector(bc)
+        
+        # Async
+        i = AsyncInjector(bc)
         result = await i.resolve(A)
         self.assertIs(result.test, dict_)
 
+        # Sync
+        # Async
+        i = Injector(bc)
+        result = i.resolve(A)
+        self.assertIs(result.test, dict_)
